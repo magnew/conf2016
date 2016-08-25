@@ -6,7 +6,7 @@ var haloAPI = require("haloapi");
 var shell = require('shelljs');
 var rq = require('request-promise');
 
-var MY_KEY = '5821a03312204c339f749f0d55073d1d';
+var MY_KEY = ...
 
 var JAN_SEASON_ID = '2fcc20a0-53ff-4ffb-8f72-eebb2e419273';
 var SLAYER_ID = '892189e9-d712-4bdb-afa7-1ccab43fbed4';
