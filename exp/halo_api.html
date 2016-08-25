@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JSSample</title>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var myKey = '5821a03312204c339f749f0d55073d1d';
+    $(function() {
+        var params = {
+            
+        };
+      
+        $.ajax({
+            url: "https://www.haloapi.com/metadata/h5/metadata/seasons?" + $.param(params),
+            beforeSend: function(xhrObj){
+                // Request headers
+                xhrObj.setRequestHeader("Ocp-Apim-Subscription-Key", myKey);
+                xhrObj.setRequestHeader('Access-Control-Allow-Origin', '*');
+            },
+            type: "GET"
+            // Request body
+            // data: "{body}",
+        })
+        .done(function(data) {
+            alert("success");
+        })
+        .fail(function() {
+            alert("error");
+        });
+    });
+</script>
+</body>
+</html>
