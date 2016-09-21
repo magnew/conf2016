@@ -22,39 +22,42 @@ define([
             
             this.$el.height('100%').width('100%').addClass('splunk-event-sort');
 
-            // Draw constant objects
-            //this._drawConstantObjects();
-
             this.nodeQueue = [];
+
+            this.liveData = [];
 
             this.initialRun = true;
         },
 
+        setupView: function(){
+            this.margin = {top: 20, right: 20, bottom: 70, left: 20},
+            this.width = this.$el.width() - this.margin.left - this.margin.right,
+            this.height = this.$el.height() - this.margin.top - this.margin.bottom;
+            
+            this.svg = d3.select(this.el).append('svg')
+                .attr('width', this.width + this.margin.left + this.margin.right)
+                .attr('height', this.height + this.margin.top + this.margin.bottom)
+            .append('g')
+                .attr('transform', 
+                    'translate(' + this.margin.left + ',' + this.margin.top + ')');
+            setInterval(this._updateData.bind(this), 2000)
+        },
+
         formatData: function(data) {
-            console.log('Format data ', data);
+            console.log('length ', data.rows.length);
 
             if (data.rows.length < 1 || data.fields.length < 1) {
                 return false;
             }
+                
+            // Get unique values of the second column
+            var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
             
-            if(data.fields[0].name === '_time'){
-                
-                // Get unique values of the second column
-                var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
-                
-                return {
-                    rows: data.rows,
-                    buckets: buckets
-                };
-            }
-            else {
-                return _.map(data.rows, function(row){
-                    return {
-                        name: row[0],
-                        value: row[1]
-                    }
-                });
-            }
+            return {
+                rows: data.rows,
+                buckets: buckets
+            };
+           
         },
  
         updateView: function(data, config) {
@@ -64,68 +67,107 @@ define([
             if(!data){
                 return;
             }
+    
+            this.nodeQueue = this.nodeQueue.concat(data.rows);
 
-            this.$el.empty();
             
-            var margin = {top: 20, right: 20, bottom: 70, left: 40},
-                width = 600 - margin.left - margin.right,
-                height = 300 - margin.top - margin.bottom;
+            console.log('node length', this.nodeQueue.length);
+            
 
-            var names = _.map(data, function(row){ 
-                return row.name; 
-            });
+            return this;
+        },
+
+        _updateData: function(){
+           // if(!this.dummy){
+                this.dummy = [
+                {
+                    count: Math.random()*100,
+                    name: 'monkey'
+                },
+                {
+                    count: Math.random()*100,
+                    name: 'fish'
+                }
+                ]
+            // }
+            // else {
+            //     _.each(this.dummy, function(point){
+            //         point.count = Math.random()*100
+            //     })
+            // }
+            data = this.dummy;
+            
+            this._drawBars(['monkey', 'fish'], data)
+        },
+
+        _drawBars: function(buckets, data){
+        
 
             var maxValue = _.max(_.map(data, function(row){ 
-                return row.value
+                return row.count;
             }));
 
-            var x = d3.scaleBand().rangeRound([0, width]).paddingInner(0.05).domain(names);
-            var y = d3.scaleLinear().range([height, 0]).domain([0, maxValue]);
+            var x = d3.scaleBand().rangeRound([0, this.width]).paddingInner(0).domain(buckets);
+            var y = d3.scaleLinear().range([this.height, 0]).domain([0, maxValue]);
 
-            var xAxis = d3.axisBottom(x);
-
+            var xAxis = d3.axisBottom(x)
+                .tickSizeInner(-20)
+                
             var yAxis = d3.axisLeft(y)
                 .ticks(10);
 
-            var svg = d3.select(this.el).append('svg')
-                .attr('width', width + margin.left + margin.right)
-                .attr('height', height + margin.top + margin.bottom)
-            .append('g')
-                .attr('transform', 
-                    'translate(' + margin.left + ',' + margin.top + ')');
-
-            // x.domain(data.map(function(d) { return d.date; }));
-            //y.domain([0, d3.max(data, function(d) { return d.value; })]);
-
-            svg.append('g')
-                .attr('class', 'x axis')
-                .attr('transform', 'translate(0,' + height + ')')
-                .call(xAxis)
-                .selectAll('text')
-                .style('text-anchor', 'end')
-                .attr('dx', '-.8em')
-                .attr('dy', '-.55em')
-                .attr('transform', 'rotate(-90)' );
-
-            svg.append('g')
-                .attr('class', 'y axis')
-                .call(yAxis)
-                .append('text')
-                .attr('transform', 'rotate(-90)')
-                .attr('y', 6)
-                .attr('dy', '.71em')
-                .style('text-anchor', 'end')
-                .text('Value ($)');
-
-            var bars = svg.selectAll('bar')
-                .data(data).enter().append('rect')
+            
+            var that = this;
+            var bars = this.svg.selectAll('rect')
+                .data(data)
+                .enter()
+                .append('rect')
                 .style('fill', 'steelblue')
                 .attr('x', function(d) { return x(d.name); })
                 .attr('width', x.bandwidth())
-                .attr('y', function(d) { return y(d.value); })
-                .attr('height', function(d) { return height - y(d.value); });
+                .attr('y', function(d) { return y(d.count); })
+                .attr('height', function(d) { return that.height - y(d.count); });
+            
+            this.svg.selectAll('rect')
+                .data(data)
+                .transition()
+                .duration(1000)
+                .attr('y', function(d) { return y(d.count); })
+                .attr('height', function(d){return that.height - y(d.count);})
 
-            return this;
+            var lables = this.svg.selectAll('text')
+                .data(data)
+                .enter()
+                .append('text')
+                .text(function (d) { return d.name })
+                .attr('transform', function(d) { 
+                    return 'translate(' + (x(d.name) + 10) + ',' + (that.height - 10) + ')'; 
+                })
+                .attr('class', 'bar-label')
+                
+
+            // AXES
+
+            // svg.append('g')
+            //     .attr('class', 'y axis')
+            //     .call(yAxis)
+            //     .append('text')
+            //     .attr('transform', 'rotate(-90)')
+            //     .attr('y', 6)
+            //     .attr('dy', '.71em')
+            //     .style('text-anchor', 'end')
+            //     .text('Value ($)');
+
+            // svg.append('g')
+            //     .attr('class', 'x axis')
+            //     .attr('transform', 'translate(0,' + height + ')')
+            //     .call(xAxis)
+            //     .selectAll('text')
+            //     .style('text-anchor', 'end')
+            //     .attr('dx', '-.8em')
+            //     .attr('dy', '-.55em')
+            //     .attr('transform', 'rotate(-90)' );
+
         },
 
         _drawConstantObjects: function(){
@@ -138,8 +180,6 @@ define([
             var graph = this._viz.svg;
 
             var color = d3.scaleOrdinal(d3.schemeCategory10)
-
-            debugger;
 
             var xScale = d3.scaleBand().rangeRound([this._viz.margin.left , graphWidth - this._viz.margin.right]).paddingInner(0.05)
                     .domain(this.buckets);

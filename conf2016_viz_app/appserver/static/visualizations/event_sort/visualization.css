@@ -13,3 +13,8 @@
   font-family: 'Lucida Grande', 'Lucida Sans Unicode', Arial, Helvetica;
   cursor: pointer;  
 }
+
+.splunk-event-sort .bar-label {
+  fill: #aaa;
+  font-size: 15px;
+}
