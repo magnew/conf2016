@@ -40,7 +40,7 @@ define([
             .append('g')
                 .attr('transform', 
                     'translate(' + this.margin.left + ',' + this.margin.top + ')');
-            setInterval(this._updateData.bind(this), 2000)
+            setInterval(this._updateData.bind(this), 700)
         },
 
         formatData: function(data) {
@@ -51,13 +51,19 @@ define([
             }
                 
             // Get unique values of the second column
-            var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
+            // var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
             
-            return {
-                rows: data.rows,
-                buckets: buckets
-            };
-           
+            // return {
+            //     rows: data.rows,
+            //     buckets: buckets
+            // };
+
+            return _.map(data.rows, function(row){
+                return {
+                    name: row[0],
+                    count: parseInt(row[1])
+                }
+            });   
         },
  
         updateView: function(data, config) {
@@ -68,8 +74,18 @@ define([
                 return;
             }
     
-            this.nodeQueue = this.nodeQueue.concat(data.rows);
+            this.dataQueue = this.nodeQueue.concat(data);
 
+            this.liveData = _.map(data, function(d){
+                return {
+                    name: d.name,
+                    count: 0
+                }
+            });
+
+            this.buckets = _.pluck(data, 'name');
+
+            // this._drawBars(_.pluck(data, 'name'), data)
             
             console.log('node length', this.nodeQueue.length);
             
@@ -78,37 +94,44 @@ define([
         },
 
         _updateData: function(){
-           // if(!this.dummy){
-                this.dummy = [
-                {
-                    count: Math.random()*100,
-                    name: 'monkey'
-                },
-                {
-                    count: Math.random()*100,
-                    name: 'fish'
-                }
-                ]
-            // }
-            // else {
-            //     _.each(this.dummy, function(point){
-            //         point.count = Math.random()*100
-            //     })
-            // }
-            data = this.dummy;
+            var dataEmpty = _.every(this.dataQueue, function(d){
+                return d.count < 1;
+            });
+            if(this.liveData.length < 1 || dataEmpty){
+                return;
+            }
+            var speed = 100;
             
-            this._drawBars(['monkey', 'fish'], data)
+            if(this.initialRun) {
+                this._drawBars(this.buckets, this.liveData);
+                this.initialRun = false;
+            }
+            else {
+                _.each(this.dataQueue, function(d){
+                    var liveDatum = _.find(this.liveData, function(l){
+                        return l.name === d.name;
+                    });
+                    if(d.count > speed) {
+                        liveDatum.count += speed;
+                        d.count -=speed;
+                    }
+                    else {
+                        liveDatum.count += d.count;
+                        d.count = 0;
+                    }
+                }, this);
+                this._drawBars(this.buckets, this.liveData)
+            }     
         },
 
         _drawBars: function(buckets, data){
         
-
             var maxValue = _.max(_.map(data, function(row){ 
                 return row.count;
             }));
 
             var x = d3.scaleBand().rangeRound([0, this.width]).paddingInner(0).domain(buckets);
-            var y = d3.scaleLinear().range([this.height, 0]).domain([0, maxValue]);
+            var y = d3.scaleLinear().range([this.height, 0]).domain([0, 3000]);
 
             var xAxis = d3.axisBottom(x)
                 .tickSizeInner(-20)
@@ -131,9 +154,17 @@ define([
             this.svg.selectAll('rect')
                 .data(data)
                 .transition()
-                .duration(1000)
+                .duration(500)
                 .attr('y', function(d) { return y(d.count); })
                 .attr('height', function(d){return that.height - y(d.count);})
+
+            // this.svg.selectAll('rect')
+            //     .data(data)
+            //     .exit()
+            // .transition()
+            //     .duration(500)
+            //     .style('width', 0)
+            //     .remove();
 
             var lables = this.svg.selectAll('text')
                 .data(data)
@@ -144,6 +175,11 @@ define([
                     return 'translate(' + (x(d.name) + 10) + ',' + (that.height - 10) + ')'; 
                 })
                 .attr('class', 'bar-label')
+
+            // this.svg.selectAll('text')
+            //     .data(data)
+            //     .exit()
+            //     .remove();
                 
 
             // AXES
