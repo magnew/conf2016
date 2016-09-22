@@ -12,6 +12,10 @@ define([
             vizUtils,
             d3
         ) {
+
+    function randomBetween(a, b){
+        return Math.floor(Math.random() * a) + b; 
+    }
  
     return SplunkVisualizationBase.extend({
  
@@ -84,12 +88,11 @@ define([
             });
 
             this.buckets = _.pluck(data, 'name');
-
-            // this._drawBars(_.pluck(data, 'name'), data)
             
             console.log('node length', this.nodeQueue.length);
-            
 
+            var that = this;
+            
             return this;
         },
 
@@ -103,7 +106,7 @@ define([
             var speed = 100;
             
             if(this.initialRun) {
-                this._drawBars(this.buckets, this.liveData);
+                this._draw(this.buckets, this.liveData);
                 this.initialRun = false;
             }
             else {
@@ -120,11 +123,12 @@ define([
                         d.count = 0;
                     }
                 }, this);
-                this._drawBars(this.buckets, this.liveData)
+                this._draw(this.buckets, this.liveData)
             }     
         },
 
-        _drawBars: function(buckets, data){
+        _draw: function(buckets, data){
+            var that = this;
         
             var maxValue = _.max(_.map(data, function(row){ 
                 return row.count;
@@ -133,77 +137,98 @@ define([
             var x = d3.scaleBand().rangeRound([0, this.width]).paddingInner(0).domain(buckets);
             var y = d3.scaleLinear().range([this.height, 0]).domain([0, 3000]);
 
-            var xAxis = d3.axisBottom(x)
-                .tickSizeInner(-20)
+            // var xAxis = d3.axisBottom(x)
+            //     .tickSizeInner(-20)
                 
-            var yAxis = d3.axisLeft(y)
-                .ticks(10);
+            // var yAxis = d3.axisLeft(y)
+            //     .ticks(10);
 
-            
-            var that = this;
-            var bars = this.svg.selectAll('rect')
-                .data(data)
-                .enter()
-                .append('rect')
+            function drawBars () {
+                
+                var bars = that.svg.selectAll('rect')
+                    .data(data)
+                    .enter()
+                    .append('rect')
+                    .style('fill', 'steelblue')
+                    .attr('x', function(d) { return x(d.name); })
+                    .attr('width', x.bandwidth())
+                    .attr('y', function(d) { return y(d.count); })
+                    .attr('height', function(d) { return that.height - y(d.count); });
+                
+                that.svg.selectAll('rect')
+                    .data(data)
+                    .transition()
+                    .duration(500)
+                    .attr('y', function(d) { return y(d.count); })
+                    .attr('height', function(d){return that.height - y(d.count);})
+
+                // that.svg.selectAll('rect')
+                //     .data(data)
+                //     .exit()
+                // .transition()
+                //     .duration(500)
+                //     .style('width', 0)
+                //     .remove();
+
+                var lables = that.svg.selectAll('text')
+                    .data(data)
+                    .enter()
+                    .append('text')
+                    .text(function (d) { return d.name })
+                    .attr('transform', function(d) { 
+                        return 'translate(' + (x(d.name) + 10) + ',' + (that.height - 10) + ')'; 
+                    })
+                    .attr('class', 'bar-label')
+
+                // that.svg.selectAll('text')
+                //     .data(data)
+                //     .exit()
+                //     .remove();
+            }
+            drawBars();
+            if(!this.simulation){
+                this.nodes = _.map(this.buckets, function(b){
+                    return {
+                        type: b,
+                        r: randomBetween(2, 8),
+                        x: randomBetween(x(b), x(b) + x.bandwidth()),
+                        y: 0
+                    }
+                });
+
+                this.simulation = d3.forceSimulation(this.nodes)
+                    .alphaDecay([0])
+                    // .velocityDecay(0.01)
+                    .force('y', d3.forceY([that.height]).strength(0.05))
+                    .on('tick', ticked);
+                
+                function ticked(){
+                    that.svg.selectAll('circle')
+                        .attr('cx', function(d) { return d.x; })
+                        .attr('cy', function(d) { return d.y; });     
+                }
+            }
+            else {
+
+                this.nodes = this.nodes.concat(_.map(this.buckets, function(b){
+                    return {
+                        type: b,
+                        r: randomBetween(2, 8),
+                        x: randomBetween(x(b), x(b) + x.bandwidth()),
+                        y: 0
+                    }
+                }));
+
+                console.log('nodes', this.nodes);
+                this.simulation.nodes(this.nodes)
+            }
+            that.svg.selectAll('circle')
+                .data(this.nodes)
+            .enter().append('circle')
+                .attr('cx', function(d) { return d.x; })
+                .attr('cy', function(d) { return d.y; })
+                .attr('r', function(d) { return d.r; })
                 .style('fill', 'steelblue')
-                .attr('x', function(d) { return x(d.name); })
-                .attr('width', x.bandwidth())
-                .attr('y', function(d) { return y(d.count); })
-                .attr('height', function(d) { return that.height - y(d.count); });
-            
-            this.svg.selectAll('rect')
-                .data(data)
-                .transition()
-                .duration(500)
-                .attr('y', function(d) { return y(d.count); })
-                .attr('height', function(d){return that.height - y(d.count);})
-
-            // this.svg.selectAll('rect')
-            //     .data(data)
-            //     .exit()
-            // .transition()
-            //     .duration(500)
-            //     .style('width', 0)
-            //     .remove();
-
-            var lables = this.svg.selectAll('text')
-                .data(data)
-                .enter()
-                .append('text')
-                .text(function (d) { return d.name })
-                .attr('transform', function(d) { 
-                    return 'translate(' + (x(d.name) + 10) + ',' + (that.height - 10) + ')'; 
-                })
-                .attr('class', 'bar-label')
-
-            // this.svg.selectAll('text')
-            //     .data(data)
-            //     .exit()
-            //     .remove();
-                
-
-            // AXES
-
-            // svg.append('g')
-            //     .attr('class', 'y axis')
-            //     .call(yAxis)
-            //     .append('text')
-            //     .attr('transform', 'rotate(-90)')
-            //     .attr('y', 6)
-            //     .attr('dy', '.71em')
-            //     .style('text-anchor', 'end')
-            //     .text('Value ($)');
-
-            // svg.append('g')
-            //     .attr('class', 'x axis')
-            //     .attr('transform', 'translate(0,' + height + ')')
-            //     .call(xAxis)
-            //     .selectAll('text')
-            //     .style('text-anchor', 'end')
-            //     .attr('dx', '-.8em')
-            //     .attr('dy', '-.55em')
-            //     .attr('transform', 'rotate(-90)' );
-
         },
 
         _drawConstantObjects: function(){
