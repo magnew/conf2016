@@ -13,8 +13,8 @@ define([
             d3
         ) {
 
-    function randomBetween(a, b){
-        return Math.floor(Math.random() * a) + b; 
+    function randomBetween(min, max){
+        return Math.floor(Math.random() * (max - min + 1) + min);
     }
  
     return SplunkVisualizationBase.extend({
@@ -26,11 +26,18 @@ define([
             
             this.$el.height('100%').width('100%').addClass('splunk-event-sort');
 
-            this.nodeQueue = [];
+            // Data points move from the dataQueue to the dropQueue to the bars
+            this.dataQueue = [];
+            this.dropQueue = [];
+            this.barData = [];
 
-            this.liveData = [];
+            // Drop nodes represent the actual falling drops
+            this.dropNodes = [];
 
-            this.initialRun = true;
+            // A lookup of how tall the bars are
+            this.barTops = {};
+
+            this.readyToUpdate = true;
         },
 
         setupView: function(){
@@ -48,20 +55,10 @@ define([
         },
 
         formatData: function(data) {
-            console.log('length ', data.rows.length);
-
             if (data.rows.length < 1 || data.fields.length < 1) {
                 return false;
             }
-                
-            // Get unique values of the second column
-            // var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
             
-            // return {
-            //     rows: data.rows,
-            //     buckets: buckets
-            // };
-
             return _.map(data.rows, function(row){
                 return {
                     name: row[0],
@@ -72,15 +69,12 @@ define([
  
         updateView: function(data, config) {
 
-            console.log('Update', data);
-
             if(!data){
                 return;
             }
-    
-            this.dataQueue = this.nodeQueue.concat(data);
+            this.dataQueue = this.dataQueue.concat(data);
 
-            this.liveData = _.map(data, function(d){
+            this.barData = _.map(data, function(d){
                 return {
                     name: d.name,
                     count: 0
@@ -88,30 +82,43 @@ define([
             });
 
             this.buckets = _.pluck(data, 'name');
-            
-            console.log('node length', this.nodeQueue.length);
 
-            var that = this;
+            _.each(this.buckets, function(bucket){
+                this.barTops[bucket] = this.height;
+            }, this);
+
+            var maxValue = _.max(_.map(data, function(row){ 
+                return row.count;
+            }));
             
+            this.xScale = d3.scaleBand()
+                .rangeRound([0, this.width])
+                .paddingInner(0)
+                .domain(this.buckets);
+
+            this.yScale = d3.scaleLinear()
+                .range([this.height, 0])
+                .domain([0, 3000]);
+
+            this._updateBars();
+
+            this.readyToUpdate = true;
+
             return this;
         },
 
         _updateData: function(){
-            var dataEmpty = _.every(this.dataQueue, function(d){
-                return d.count < 1;
-            });
-            if(this.liveData.length < 1 || dataEmpty){
-                return;
-            }
-            var speed = 100;
+            if(this.readyToUpdate) {
+                var dataEmpty = _.every(this.dataQueue, function(d){
+                    return d.count < 1; 
+                });
+                if(this.barData.length < 1 || dataEmpty){
+                    return;
+                }
+                var speed = 100;
             
-            if(this.initialRun) {
-                this._draw(this.buckets, this.liveData);
-                this.initialRun = false;
-            }
-            else {
                 _.each(this.dataQueue, function(d){
-                    var liveDatum = _.find(this.liveData, function(l){
+                    var liveDatum = _.find(this.barData, function(l){
                         return l.name === d.name;
                     });
                     if(d.count > speed) {
@@ -123,52 +130,36 @@ define([
                         d.count = 0;
                     }
                 }, this);
-                this._draw(this.buckets, this.liveData)
-            }     
+                this._draw(this.buckets, this.barData)    
+            }
         },
 
-        _draw: function(buckets, data){
+        _updateBars: function() {
             var that = this;
-        
-            var maxValue = _.max(_.map(data, function(row){ 
-                return row.count;
-            }));
-
-            var x = d3.scaleBand().rangeRound([0, this.width]).paddingInner(0).domain(buckets);
-            var y = d3.scaleLinear().range([this.height, 0]).domain([0, 3000]);
-
-            // var xAxis = d3.axisBottom(x)
-            //     .tickSizeInner(-20)
-                
-            // var yAxis = d3.axisLeft(y)
-            //     .ticks(10);
-
-            function drawBars () {
-                
-                var bars = that.svg.selectAll('rect')
+            var data = that.barData;
+            var bars = that.svg.selectAll('rect')
                     .data(data)
                     .enter()
                     .append('rect')
-                    .style('fill', 'steelblue')
-                    .attr('x', function(d) { return x(d.name); })
-                    .attr('width', x.bandwidth())
-                    .attr('y', function(d) { return y(d.count); })
-                    .attr('height', function(d) { return that.height - y(d.count); });
+                    .style('fill', 'rgb(171, 190, 191)')
+                    .attr('x', function(d) { return that.xScale(d.name); })
+                    .attr('width', that.xScale.bandwidth())
+                    .attr('y', function(d) { return that.yScale(d.count); })
+                    .attr('height', function(d) { 
+                        return that.height - that.yScale(d.count); 
+                    });
                 
                 that.svg.selectAll('rect')
                     .data(data)
                     .transition()
-                    .duration(500)
-                    .attr('y', function(d) { return y(d.count); })
-                    .attr('height', function(d){return that.height - y(d.count);})
-
-                // that.svg.selectAll('rect')
-                //     .data(data)
-                //     .exit()
-                // .transition()
-                //     .duration(500)
-                //     .style('width', 0)
-                //     .remove();
+                    .duration(200)
+                    .attr('y', function(d) { 
+                        var top = that.yScale(d.count);
+                        that.barTops[d.name] = top;
+                        return that.yScale(d.count); })
+                    .attr('height', function(d){
+                        return that.height - that.yScale(d.count);
+                    })
 
                 var lables = that.svg.selectAll('text')
                     .data(data)
@@ -176,191 +167,71 @@ define([
                     .append('text')
                     .text(function (d) { return d.name })
                     .attr('transform', function(d) { 
-                        return 'translate(' + (x(d.name) + 10) + ',' + (that.height - 10) + ')'; 
+                        return 'translate(' + (that.xScale(d.name) + 10) + ',' + (that.height - 10) + ')'; 
                     })
                     .attr('class', 'bar-label')
+        },
 
-                // that.svg.selectAll('text')
-                //     .data(data)
-                //     .exit()
-                //     .remove();
-            }
-            drawBars();
+        _draw: function(buckets, data){
+            var that = this;
+            
+            this.dropNodes = this.dropNodes.concat(_.map(this.buckets, function(b){
+                return {
+                    type: b,
+                    r: randomBetween(2, 6),
+                    x: randomBetween(that.xScale(b), that.xScale(b) + that.xScale.bandwidth()),
+                    y: 0
+                }
+            }));
+
+            // this.dropNodes.push({
+            //         type: 'splunkd',
+            //         r: randomBetween(2, 8),
+            //         x: randomBetween(x('splunkd'), x('splunkd') + x.bandwidth()),
+            //         y: 0
+            //     })
+
             if(!this.simulation){
-                this.nodes = _.map(this.buckets, function(b){
-                    return {
-                        type: b,
-                        r: randomBetween(2, 8),
-                        x: randomBetween(x(b), x(b) + x.bandwidth()),
-                        y: 0
-                    }
-                });
-
-                this.simulation = d3.forceSimulation(this.nodes)
+                this.simulation = d3.forceSimulation(this.dropNodes)
                     .alphaDecay([0])
-                    // .velocityDecay(0.01)
-                    .force('y', d3.forceY([that.height]).strength(0.05))
+                    .velocityDecay(0.01)
+                    .force('y', d3.forceY([that.height]).strength(0.001))
                     .on('tick', ticked);
                 
                 function ticked(){
+                    _.each(that.dropNodes, function(node){
+                        if(!node.dead && node.y >= that.barTops[node.type]){
+                            node.dead = true;
+                            node.r = 1e-6;
+                            that._updateBars();
+                        }
+                    });
                     that.svg.selectAll('circle')
                         .attr('cx', function(d) { return d.x; })
-                        .attr('cy', function(d) { return d.y; });     
+                        .attr('cy', function(d) { return d.y; })
+                        .attr('r', function(d) { return d.r; });    
                 }
             }
             else {
-
-                this.nodes = this.nodes.concat(_.map(this.buckets, function(b){
-                    return {
-                        type: b,
-                        r: randomBetween(2, 8),
-                        x: randomBetween(x(b), x(b) + x.bandwidth()),
-                        y: 0
-                    }
-                }));
-
-                console.log('nodes', this.nodes);
-                this.simulation.nodes(this.nodes)
+                this.simulation.nodes(this.dropNodes)
             }
             that.svg.selectAll('circle')
-                .data(this.nodes)
+                .data(this.dropNodes)
             .enter().append('circle')
                 .attr('cx', function(d) { return d.x; })
                 .attr('cy', function(d) { return d.y; })
                 .attr('r', function(d) { return d.r; })
-                .style('fill', 'steelblue')
-        },
-
-        _drawConstantObjects: function(){
-
-            var $svg = $(this._viz.svg);
-            $svg.empty();
-            
-            var graphWidth = $svg.width()
-            var graphHeight = $svg.height();
-            var graph = this._viz.svg;
-
-            var color = d3.scaleOrdinal(d3.schemeCategory10)
-
-            var xScale = d3.scaleBand().rangeRound([this._viz.margin.left , graphWidth - this._viz.margin.right]).paddingInner(0.05)
-                    .domain(this.buckets);
-                    
-
-            var xAxis = d3.axisBottom(xScale);
-
-            graph.append('g')
-                .attr('class', 'xaxis axis')
-                .attr('transform', 'translate(0,' + (graphHeight - 30) + ')')
-                .call(xAxis);
-            
-            var sources = graph.selectAll('circle')
-                .data(this.buckets)
-              .enter().append('svg:circle')
-                .attr('r', 12)
-                .attr('cx', function(d) { return xScale(d); })
-                .attr('cy', function(d) { 20; })
-                .style('fill', 'black')
-                
-            return;
-
-            var force = d3.layout.force()
-                .gravity(0)
-                .charge(-2)
-                .size([graphWidth, graphHeight]);
-
-            var syncs = force.nodes();
-
-
-                a = {type: 'splunk_web_access', x: 500, y: graphHeight * 0.125, fixed: true},
-                b = {type: 'splunkd', x: 500, y: graphHeight * 0.375, fixed: true},
-                c = {type: 'splunkd_ui_access', x: 500, y: graphHeight * 0.625, fixed: true},
-                d = {type: 'other', x: 500, y: graphHeight * 0.875, fixed: true};
-
-            syncs.push(a, b, c, d);
-
-            var svg = d3.select(this.el).append('svg')
-                .attr('width', graphWidth)
-                .attr('height', graphHeight);
-
-            svg.append('svg:rect')
-                .attr('width', graphWidth)
-                .attr('height', graphHeight);
-
-            svg.selectAll('circle')
-                .data(syncs)
-              .enter().append('svg:circle')
-                .attr('r', 12)
-                .attr('cx', function(d) { return d.x; })
-                .attr('cy', function(d) { return d.y; })
-                .style('fill', fill)
-                .call(force.drag);
-
-            var lables = svg.selectAll('text')
-                .data(syncs)
-                .enter()
-                .append('text')
-                .text(function(d){ return d.type})
-                .attr('x', function(d) { return d.x + 45; })
-                .attr('y', function(d) { return d.y + 5; })
-                .style('font-size', '21px')
-                .style('fill', function(d) { return color(d.type); });
-
-            var nodes = force.nodes();
-
-            force.on('tick', function(e) {
-                var k = e.alpha * .07;
-                nodes.forEach(function(node) {
-                    
-                    var center = syncs[that.typeLookup[node.type]] || syncs[3];
-                    node.x += (center.x - node.x) * k;
-                    node.y += (center.y - node.y) * k;
-                });
-
-                svg.selectAll('circle')
-                    .attr('cx', function(d) { return d.x; })
-                    .attr('cy', function(d) { return d.y; });                
+                .style('fill', 'rgb(171, 190, 230)')
+        
+            that.dropNodes = _.filter(that.dropNodes, function(node){
+                return !node.dead;
             });
-
-            function fill(d){
-                return color(d.type);
-            }
-
-            function addNodeFromQueue(){
-                var newNode = that.nodeQueue.shift();
-                if(!newNode){
-                    return;
+            console.log('nodes length', that.dropNodes.length);
+            setTimeout(function(){
+                if(that.dropNodes.length < 1){
+                    that.simulation.stop()
                 }
-                var p1 = [20, graphHeight / 2];
-                var node = {
-                    type: _.contains(_.keys(that.typeLookup), newNode[1]) ? newNode[1] : 'other',
-                    x: p1[0], 
-                    y: p1[1]
-                };
-
-                svg.append('svg:circle')
-                  .data([node])
-                  .attr('cx', function(d) { return d.x; })
-                  .attr('cy', function(d) { return d.y; })
-                  .attr('r', 4.5)
-                  .style('fill', fill)
-                .transition()
-                  .delay(8000)
-                  .attr('r', 1e-6)
-                  .each('end', function() { nodes.splice(4, 1); })
-                  .remove();
-
-                nodes.push(node);
-                force.start();
-            }
-
-            setInterval(function(){
-                var speed = Math.ceil(that.nodeQueue.length / 500) || 1;
-                //console.log(that.nodeQueue.length);
-                // console.log(speed, 'x');
-                for (var i = 0; i < speed; i++) {
-                    addNodeFromQueue();
-                };
-            }, 130);
+            }, 1000);
         },
 
         getInitialDataParams: function() {
