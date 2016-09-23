@@ -51,7 +51,14 @@ define([
             .append('g')
                 .attr('transform', 
                     'translate(' + this.margin.left + ',' + this.margin.top + ')');
-            setInterval(this._updateData.bind(this), 700)
+
+            this.simulation = d3.forceSimulation(this.dropNodes)
+                    .alphaDecay([0])
+                    .velocityDecay(0.01)
+                    .force('y', d3.forceY([this.height]).strength(0.001))
+                    .on('tick', this._simTick.bind(this));
+
+            setInterval(this._updateData.bind(this), 400)
         },
 
         formatData: function(data) {
@@ -108,40 +115,54 @@ define([
         },
 
         _updateData: function(){
-            if(this.readyToUpdate) {
-                var dataEmpty = _.every(this.dataQueue, function(d){
+            var that = this;
+            if(that.readyToUpdate) {
+                var dataEmpty = _.every(that.dataQueue, function(d){
                     return d.count < 1; 
                 });
-                if(this.barData.length < 1 || dataEmpty){
+                if(that.barData.length < 1 || dataEmpty){
                     return;
                 }
-                var speed = 100;
+
+                function setupDrops(num, name){
+                    for(i = 0; i < num; i++) {
+                        setTimeout(function(){
+                            that._addDrop(name);
+                        }, randomBetween(1, 400))
+                    }
+                }
             
-                _.each(this.dataQueue, function(d){
-                    var liveDatum = _.find(this.barData, function(l){
-                        return l.name === d.name;
-                    });
+                _.each(that.dataQueue, function(d){
+                    var sizing = Math.ceil(d.count / 15);
+                    var speed =  sizing > 30 ? 30 : sizing; 
+
+                    if(d.count < 1){
+                        return;
+                    }
                     if(d.count > speed) {
-                        liveDatum.count += speed;
-                        d.count -=speed;
+                        setupDrops(speed, d.name);
+                        d.count -= speed;
                     }
                     else {
-                        liveDatum.count += d.count;
+                        setupDrops(d.count, d.name)
                         d.count = 0;
                     }
-                }, this);
-                this._draw(this.buckets, this.barData)    
+                });
+
+                
             }
         },
 
         _updateBars: function() {
             var that = this;
             var data = that.barData;
+            console.log('bar update', that.barData);
+            
             var bars = that.svg.selectAll('rect')
                     .data(data)
                     .enter()
                     .append('rect')
-                    .style('fill', 'rgb(171, 190, 191)')
+                    .style('fill', 'rgb(171, 190, 230)')
                     .attr('x', function(d) { return that.xScale(d.name); })
                     .attr('width', that.xScale.bandwidth())
                     .attr('y', function(d) { return that.yScale(d.count); })
@@ -151,8 +172,8 @@ define([
                 
                 that.svg.selectAll('rect')
                     .data(data)
-                    .transition()
-                    .duration(200)
+                    // .transition()
+                    // .duration(400)
                     .attr('y', function(d) { 
                         var top = that.yScale(d.count);
                         that.barTops[d.name] = top;
@@ -172,51 +193,20 @@ define([
                     .attr('class', 'bar-label')
         },
 
-        _draw: function(buckets, data){
-            var that = this;
-            
-            this.dropNodes = this.dropNodes.concat(_.map(this.buckets, function(b){
-                return {
-                    type: b,
-                    r: randomBetween(2, 6),
-                    x: randomBetween(that.xScale(b), that.xScale(b) + that.xScale.bandwidth()),
-                    y: 0
-                }
-            }));
+        _addDrop: function(dropType){
+            var that = this;    
 
-            // this.dropNodes.push({
-            //         type: 'splunkd',
-            //         r: randomBetween(2, 8),
-            //         x: randomBetween(x('splunkd'), x('splunkd') + x.bandwidth()),
-            //         y: 0
-            //     })
+            that.dropNodes.push({
+                type: dropType,
+                r: randomBetween(2, 6),
+                x: randomBetween(that.xScale(dropType), that.xScale(dropType) + that.xScale.bandwidth()),
+                y: 0
+            })
 
-            if(!this.simulation){
-                this.simulation = d3.forceSimulation(this.dropNodes)
-                    .alphaDecay([0])
-                    .velocityDecay(0.01)
-                    .force('y', d3.forceY([that.height]).strength(0.001))
-                    .on('tick', ticked);
-                
-                function ticked(){
-                    _.each(that.dropNodes, function(node){
-                        if(!node.dead && node.y >= that.barTops[node.type]){
-                            node.dead = true;
-                            node.r = 1e-6;
-                            that._updateBars();
-                        }
-                    });
-                    that.svg.selectAll('circle')
-                        .attr('cx', function(d) { return d.x; })
-                        .attr('cy', function(d) { return d.y; })
-                        .attr('r', function(d) { return d.r; });    
-                }
-            }
-            else {
-                this.simulation.nodes(this.dropNodes)
-            }
+            that.simulation.nodes(that.dropNodes)
+           
             that.svg.selectAll('circle')
-                .data(this.dropNodes)
+                .data(that.dropNodes)
             .enter().append('circle')
                 .attr('cx', function(d) { return d.x; })
                 .attr('cy', function(d) { return d.y; })
@@ -226,12 +216,26 @@ define([
             that.dropNodes = _.filter(that.dropNodes, function(node){
                 return !node.dead;
             });
-            console.log('nodes length', that.dropNodes.length);
-            setTimeout(function(){
-                if(that.dropNodes.length < 1){
-                    that.simulation.stop()
+        },
+
+        _simTick: function(){
+            var that = this;
+            _.each(that.dropNodes, function(node){
+                if(!node.dead && node.y >= that.barTops[node.type]){
+                    var barDatum = _.find(that.barData, function(d){
+                        return d.name === node.type;
+                    });
+                    node.dead = true;
+                    node.r = 1e-6;
+
+                    barDatum.count ++;
+                    that._updateBars();
                 }
-            }, 1000);
+            });
+            that.svg.selectAll('circle')
+                .attr('cx', function(d) { return d.x; })
+                .attr('cy', function(d) { return d.y; })
+                .attr('r', function(d) { return d.r; });    
         },
 
         getInitialDataParams: function() {
