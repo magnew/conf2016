@@ -1,0 +1,5 @@
+.splunk-conf-bar .bar-label {
+  fill: #555;
+  font-size: 15px;
+  text-anchor: middle;
+}

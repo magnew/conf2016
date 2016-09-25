@@ -24,7 +24,7 @@ define([
 
             this.$el = $(this.el);
             
-            this.$el.height('100%').width('100%').addClass('splunk-event-sort');
+            this.$el.height('100%').width('100%').addClass('splunk-rain-graph');
 
             // Data points move from the dataQueue to the dropQueue to the bars
             this.dataQueue = [];
@@ -41,17 +41,18 @@ define([
         },
 
         setupView: function(){
-            this.margin = {top: 20, right: 20, bottom: 70, left: 20},
+            this.margin = {top: 20, right: 20, bottom: 20, left: 20},
             this.width = this.$el.width() - this.margin.left - this.margin.right,
             this.height = this.$el.height() - this.margin.top - this.margin.bottom;
-            
+
             this.svg = d3.select(this.el).append('svg')
                 .attr('width', this.width + this.margin.left + this.margin.right)
                 .attr('height', this.height + this.margin.top + this.margin.bottom)
+                .style('background', this.backgroundColor)
             .append('g')
                 .attr('transform', 
                     'translate(' + this.margin.left + ',' + this.margin.top + ')');
-
+            
             this.simulation = d3.forceSimulation(this.dropNodes)
                     .alphaDecay([0])
                     .velocityDecay(0.01)
@@ -75,10 +76,25 @@ define([
         },
  
         updateView: function(data, config) {
-
             if(!data){
                 return;
             }
+
+            this.readyToUpdate = false;
+            this.simulation.stop();
+            
+            this.backgroundColor = this._getEscapedProperty('backgroundColor', config) || '#444';
+            this.mainColor = this._getEscapedProperty('mainColor', config) || '#6db7c6';
+
+            this.$el.find('svg').css('background', this.backgroundColor);
+            this.$el.find('rect').css('fill', this.mainColor);
+            this.$el.find('circle').css('fill', this.mainColor);
+
+            // this.$el.empty();
+            // this.dataQueue = [];
+            // this.barData = [];
+            this.dropQueue = [];
+            this.dropNodes = [];
             this.dataQueue = this.dataQueue.concat(data);
 
             this.barData = _.map(data, function(d){
@@ -105,11 +121,12 @@ define([
 
             this.yScale = d3.scaleLinear()
                 .range([this.height, 0])
-                .domain([0, 3000]);
+                .domain([0, maxValue]);
 
             this._updateBars();
 
             this.readyToUpdate = true;
+            this.simulation.restart();
 
             return this;
         },
@@ -148,49 +165,76 @@ define([
                         d.count = 0;
                     }
                 });
-
-                
             }
         },
 
         _updateBars: function() {
             var that = this;
             var data = that.barData;
-            console.log('bar update', that.barData);
             
-            var bars = that.svg.selectAll('rect')
-                    .data(data)
-                    .enter()
-                    .append('rect')
-                    .style('fill', 'rgb(171, 190, 230)')
-                    .attr('x', function(d) { return that.xScale(d.name); })
-                    .attr('width', that.xScale.bandwidth())
-                    .attr('y', function(d) { return that.yScale(d.count); })
-                    .attr('height', function(d) { 
-                        return that.height - that.yScale(d.count); 
-                    });
+            that.svg.selectAll('rect')
+                .data(data)
+                .enter()
+                .append('rect')
+                .style('fill', that.mainColor)
+                .attr('x', function(d) { return that.xScale(d.name); })
+                .attr('width', that.xScale.bandwidth())
+                .attr('y', function(d) { return that.yScale(d.count); })
+                .attr('height', function(d) { 
+                    return that.yScale(d.count); 
+                });
                 
-                that.svg.selectAll('rect')
-                    .data(data)
-                    // .transition()
-                    // .duration(400)
-                    .attr('y', function(d) { 
-                        var top = that.yScale(d.count);
-                        that.barTops[d.name] = top;
-                        return that.yScale(d.count); })
-                    .attr('height', function(d){
-                        return that.height - that.yScale(d.count);
-                    })
+            that.svg.selectAll('rect')
+                .data(data)
+                .attr('y', function(d) { 
+                    var top = that.yScale(d.count);
+                    that.barTops[d.name] = top;
+                    return that.yScale(d.count); })
+                .attr('height', function(d){
+                    return that.height - that.yScale(d.count);
+                })
+                .attr('x', function(d) { return that.xScale(d.name); })
+                .attr('width', that.xScale.bandwidth())
 
-                var lables = that.svg.selectAll('text')
-                    .data(data)
-                    .enter()
-                    .append('text')
-                    .text(function (d) { return d.name })
-                    .attr('transform', function(d) { 
-                        return 'translate(' + (that.xScale(d.name) + 10) + ',' + (that.height - 10) + ')'; 
-                    })
-                    .attr('class', 'bar-label')
+            that.svg.selectAll('rect')
+                .data(data)
+                .exit()
+                .remove
+
+            that.svg.selectAll('text')
+                .data(data)
+                .enter()
+                .append('text')
+                .text(function (d) { return d.name })
+                .attr('transform', function(d) { 
+                    return 'translate(' 
+                        + (that.xScale(d.name) + that.xScale.bandwidth() / 2) 
+                        + ',' 
+                        + (that.height - 5) 
+                        + ')'; 
+                })
+                .attr('class', 'bar-label')
+            
+            that.svg.selectAll('text')
+                .data(data)
+                .transition()
+                .attr('transform', function(d) { 
+                    return 'translate(' 
+                        + (that.xScale(d.name) + that.xScale.bandwidth() / 2) 
+                        + ',' 
+                        + (that.height - 5) 
+                        + ')'; 
+                });
+            
+            that.svg.selectAll('text')
+                .data(data)
+                .text(function (d) { return d.name })
+
+             that.svg.selectAll('text')
+                .data(data)
+                .exit()
+                .remove();
+
         },
 
         _addDrop: function(dropType){
@@ -198,9 +242,9 @@ define([
 
             that.dropNodes.push({
                 type: dropType,
-                r: randomBetween(2, 6),
+                r: randomBetween(2, 5),
                 x: randomBetween(that.xScale(dropType), that.xScale(dropType) + that.xScale.bandwidth()),
-                y: 0
+                y: -30
             })
 
             that.simulation.nodes(that.dropNodes)
@@ -211,7 +255,7 @@ define([
                 .attr('cx', function(d) { return d.x; })
                 .attr('cy', function(d) { return d.y; })
                 .attr('r', function(d) { return d.r; })
-                .style('fill', 'rgb(171, 190, 230)')
+                .style('fill', that.mainColor)
         
             that.dropNodes = _.filter(that.dropNodes, function(node){
                 return !node.dead;
@@ -228,8 +272,10 @@ define([
                     node.dead = true;
                     node.r = 1e-6;
 
-                    barDatum.count ++;
-                    that._updateBars();
+                    if(barDatum){
+                        barDatum.count ++;
+                        that._updateBars();
+                    }
                 }
             });
             that.svg.selectAll('circle')

@@ -35,5 +35,8 @@ access = read : [ * ], write : [ * ]
 export = system
 
 ### Visualizations
-[visualizations/event_sort]
+[visualizations/rain_graph]
+export = system
+
+[visualizations/conf_bar]
 export = system

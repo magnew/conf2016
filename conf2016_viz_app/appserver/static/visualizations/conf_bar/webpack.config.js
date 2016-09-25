@@ -2,7 +2,7 @@ var webpack = require('webpack');
 var path = require('path');
 
 module.exports = {
-    entry: 'event_sort',
+    entry: 'conf_bar',
     resolve: {
         root: [
             path.join(__dirname, 'src'),

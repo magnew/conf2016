@@ -20,7 +20,7 @@ define([
 
             this.$el = $(this.el);
             
-            this.$el.height('100%').width('100%').addClass('splunk-event-sort');
+            this.$el.height('100%').width('100%').addClass('splunk-conf-bar');
 
             this.nodeQueue = [];
 
@@ -28,76 +28,57 @@ define([
         },
 
         formatData: function(data) {
-            console.log('Format data ', data);
-
             if (data.rows.length < 1 || data.fields.length < 1) {
                 return false;
             }
             
-            if(data.fields[0].name === '_time'){
-                
-                // Get unique values of the second column
-                var buckets = _(data.rows).chain().unzip().rest().first().uniq().value();
-                
+            return _.map(data.rows, function(row){
                 return {
-                    rows: data.rows,
-                    buckets: buckets
-                };
-            }
-            else {
-                return _.map(data.rows, function(row){
-                    return {
-                        name: row[0],
-                        value: row[1]
-                    }
-                });
-            }
+                    name: row[0],
+                    count: parseInt(row[1])
+                }
+            });  
         },
  
         updateView: function(data, config) {
-
-            console.log('Update', data);
-
             if(!data){
                 return;
             }
-            this.$el.empty();
-            
-            var margin = {top: 20, right: 20, bottom: 70, left: 20},
+
+            var margin = {top: 20, right: 20, bottom: 20, left: 20},
                 width = this.$el.width() - margin.left - margin.right,
                 height = this.$el.height() - margin.top - margin.bottom;
 
-            var names = _.map(data, function(row){ 
-                return row.name; 
-            });
-
-            var maxValue = _.max(_.map(data, function(row){ 
-                return row.value
-            }));
-
-            var x = d3.scaleBand().rangeRound([0, width]).paddingInner(0).domain(names);
-            var y = d3.scaleLinear().range([height, 0]).domain([0, maxValue]);
-
-            var xAxis = d3.axisBottom(x)
-                .tickSizeInner(-20)
-                
-            var yAxis = d3.axisLeft(y)
-                .ticks(10);
-
+            this.$el.empty();
             var svg = d3.select(this.el).append('svg')
                 .attr('width', width + margin.left + margin.right)
                 .attr('height', height + margin.top + margin.bottom)
             .append('g')
                 .attr('transform', 
                     'translate(' + margin.left + ',' + margin.top + ')');
+
+            buckets = _.pluck(data, 'name');
+
+            var maxValue = _.max(_.map(data, function(row){ 
+                return row.count;
+            }));
+
+            var xScale = d3.scaleBand()
+                .rangeRound([0, width])
+                .paddingInner(0)
+                .domain(buckets);
+
+            var yScale = d3.scaleLinear()
+                .range([height, 0])
+                .domain([0, maxValue]);
             
             var bars = svg.selectAll('bar')
                 .data(data).enter().append('rect')
                 .style('fill', 'steelblue')
-                .attr('x', function(d) { return x(d.name); })
-                .attr('width', x.bandwidth())
-                .attr('y', function(d) { return y(d.value); })
-                .attr('height', function(d) { return height - y(d.value); });
+                .attr('x', function(d) { return xScale(d.name); })
+                .attr('width', xScale.bandwidth())
+                .attr('y', function(d) { return yScale(d.count); })
+                .attr('height', function(d) { return height - yScale(d.count); });
 
             var lables = svg.selectAll('text')
                 .data(data)
@@ -105,7 +86,7 @@ define([
                 .append('text')
                 .text(function (d) { return d.name })
                 .attr('transform', function(d) { 
-                    return 'translate(' + (x(d.name) + 10) + ',' + (height - 10) + ')'; 
+                    return 'translate(' + (xScale(d.name) + 10) + ',' + (height - 5) + ')'; 
                 })
                 .attr('class', 'bar-label')
 
