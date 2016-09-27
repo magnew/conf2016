@@ -44,14 +44,6 @@ define([
             this.margin = {top: 20, right: 20, bottom: 20, left: 20},
             this.width = this.$el.width() - this.margin.left - this.margin.right,
             this.height = this.$el.height() - this.margin.top - this.margin.bottom;
-
-            this.svg = d3.select(this.el).append('svg')
-                .attr('width', this.width + this.margin.left + this.margin.right)
-                .attr('height', this.height + this.margin.top + this.margin.bottom)
-                .style('background', this.backgroundColor)
-            .append('g')
-                .attr('transform', 
-                    'translate(' + this.margin.left + ',' + this.margin.top + ')');
             
             this.simulation = d3.forceSimulation(this.dropNodes)
                     .alphaDecay([0])
@@ -90,11 +82,18 @@ define([
             this.$el.find('rect').css('fill', this.mainColor);
             this.$el.find('circle').css('fill', this.mainColor);
 
-            // this.$el.empty();
-            // this.dataQueue = [];
-            // this.barData = [];
+            this.$el.empty();
+            this.dataQueue = [];
+            this.barData = [];
             this.dropQueue = [];
-            this.dropNodes = [];
+            this.svg = d3.select(this.el).append('svg')
+                .attr('width', this.width + this.margin.left + this.margin.right)
+                .attr('height', this.height + this.margin.top + this.margin.bottom)
+                .style('background', this.backgroundColor)
+            .append('g')
+                .attr('transform', 
+                    'translate(' + this.margin.left + ',' + this.margin.top + ')');
+
             this.dataQueue = this.dataQueue.concat(data);
 
             this.barData = _.map(data, function(d){
@@ -171,70 +170,41 @@ define([
         _updateBars: function() {
             var that = this;
             var data = that.barData;
-            
-            that.svg.selectAll('rect')
-                .data(data)
-                .enter()
-                .append('rect')
-                .style('fill', that.mainColor)
-                .attr('x', function(d) { return that.xScale(d.name); })
-                .attr('width', that.xScale.bandwidth())
-                .attr('y', function(d) { return that.yScale(d.count); })
-                .attr('height', function(d) { 
-                    return that.yScale(d.count); 
-                });
+            var bars = that.svg.selectAll('rect')
+                    .data(data)
+                    .enter()
+                    .append('rect')
+                    .style('fill', that.mainColor)
+                    .attr('x', function(d) { return that.xScale(d.name); })
+                    .attr('width', that.xScale.bandwidth())
+                    .attr('y', function(d) { return that.yScale(d.count); })
+                    .attr('height', function(d) { 
+                        return that.yScale(d.count); 
+                    });
                 
-            that.svg.selectAll('rect')
-                .data(data)
-                .attr('y', function(d) { 
-                    var top = that.yScale(d.count);
-                    that.barTops[d.name] = top;
-                    return that.yScale(d.count); })
-                .attr('height', function(d){
-                    return that.height - that.yScale(d.count);
-                })
-                .attr('x', function(d) { return that.xScale(d.name); })
-                .attr('width', that.xScale.bandwidth())
+                that.svg.selectAll('rect')
+                    .data(data)
+                    .attr('y', function(d) { 
+                        var top = that.yScale(d.count);
+                        that.barTops[d.name] = top;
+                        return that.yScale(d.count); })
+                    .attr('height', function(d){
+                        return that.height - that.yScale(d.count);
+                    })
 
-            that.svg.selectAll('rect')
-                .data(data)
-                .exit()
-                .remove
-
-            that.svg.selectAll('text')
-                .data(data)
-                .enter()
-                .append('text')
-                .text(function (d) { return d.name })
-                .attr('transform', function(d) { 
-                    return 'translate(' 
-                        + (that.xScale(d.name) + that.xScale.bandwidth() / 2) 
-                        + ',' 
-                        + (that.height - 5) 
-                        + ')'; 
-                })
-                .attr('class', 'bar-label')
-            
-            that.svg.selectAll('text')
-                .data(data)
-                .transition()
-                .attr('transform', function(d) { 
-                    return 'translate(' 
-                        + (that.xScale(d.name) + that.xScale.bandwidth() / 2) 
-                        + ',' 
-                        + (that.height - 5) 
-                        + ')'; 
-                });
-            
-            that.svg.selectAll('text')
-                .data(data)
-                .text(function (d) { return d.name })
-
-             that.svg.selectAll('text')
-                .data(data)
-                .exit()
-                .remove();
-
+                var lables = that.svg.selectAll('text')
+                    .data(data)
+                    .enter()
+                    .append('text')
+                    .text(function (d) { return d.name })
+                    .attr('transform', function(d) { 
+                        return 'translate(' 
+                            + (that.xScale(d.name) + that.xScale.bandwidth() / 2) 
+                            + ',' 
+                            + (that.height - 5) 
+                            + ')'; 
+                    })
+                    .attr('class', 'bar-label')
         },
 
         _addDrop: function(dropType){

@@ -21,10 +21,6 @@ define([
             this.$el = $(this.el);
             
             this.$el.height('100%').width('100%').addClass('splunk-conf-bar');
-
-            this.nodeQueue = [];
-
-            this.initialRun = true;
         },
 
         formatData: function(data) {
@@ -34,7 +30,7 @@ define([
             
             return _.map(data.rows, function(row){
                 return {
-                    name: row[0],
+                    name: vizUtils.escapeHtml(row[0]),
                     count: parseInt(row[1])
                 }
             });  

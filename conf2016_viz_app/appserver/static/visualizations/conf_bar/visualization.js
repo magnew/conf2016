@@ -66,21 +66,7 @@ define(["vizapi/SplunkVisualizationBase","vizapi/SplunkVisualizationUtils"], fun
 	            this.$el = $(this.el);
 	            
 	            this.$el.height('100%').width('100%').addClass('splunk-conf-bar');
-	        },
 
-	        setupView: function() {
-
-	            this.margin = {top: 20, right: 20, bottom: 20, left: 20};
-	            this.width = this.$el.width() - this.margin.left - this.margin.right;
-	            this.height = this.$el.height() - this.margin.top - this.margin.bottom;
-
-	            this.svg = d3.select(this.el).append('svg')
-	                .attr('width', this.width + this.margin.left + this.margin.right)
-	                .attr('height', this.height + this.margin.top + this.margin.bottom)
-	                .attr('background', this.backgroundColor || '#fff')
-	            .append('g')
-	                .attr('transform', 
-	                    'translate(' + this.margin.left + ',' + this.margin.top + ')');
 	        },
 
 	        formatData: function(data) {
@@ -90,7 +76,7 @@ define(["vizapi/SplunkVisualizationBase","vizapi/SplunkVisualizationUtils"], fun
 	            
 	            return _.map(data.rows, function(row){
 	                return {
-	                    name: row[0],
+	                    name: vizUtils.escapeHtml(row[0]),
 	                    count: parseInt(row[1])
 	                }
 	            });  
@@ -101,91 +87,50 @@ define(["vizapi/SplunkVisualizationBase","vizapi/SplunkVisualizationUtils"], fun
 	                return;
 	            }
 
-	            var that = this;
-	            
-	            this.backgroundColor = this._getEscapedProperty('backgroundColor', config) || '#fff';
-	            this.mainColor = this._getEscapedProperty('mainColor', config) || '#6db7c6';
+	            var margin = {top: 20, right: 20, bottom: 20, left: 20},
+	                width = this.$el.width() - margin.left - margin.right,
+	                height = this.$el.height() - margin.top - margin.bottom;
 
-	            this.$el.find('svg').css('background', this.backgroundColor);
+	            this.$el.empty();
+	            var svg = d3.select(this.el).append('svg')
+	                .attr('width', width + margin.left + margin.right)
+	                .attr('height', height + margin.top + margin.bottom)
+	            .append('g')
+	                .attr('transform', 
+	                    'translate(' + margin.left + ',' + margin.top + ')');
 
 	            buckets = _.pluck(data, 'name');
 
 	            var maxValue = _.max(_.map(data, function(row){ 
 	                return row.count;
 	            }));
+
 	            var xScale = d3.scaleBand()
-	                .rangeRound([0, that.width])
+	                .rangeRound([0, width])
 	                .paddingInner(0)
 	                .domain(buckets);
 
 	            var yScale = d3.scaleLinear()
-	                .range([that.height, 0])
+	                .range([height, 0])
 	                .domain([0, maxValue]);
 	            
-	            var bars = that.svg.selectAll('rect')
-	                .data(data)
-	                .enter()
-	                .append('rect')
-	                .style('fill', that.mainColor)
+	            var bars = svg.selectAll('bar')
+	                .data(data).enter().append('rect')
+	                .style('fill', 'steelblue')
 	                .attr('x', function(d) { return xScale(d.name); })
 	                .attr('width', xScale.bandwidth())
 	                .attr('y', function(d) { return yScale(d.count); })
-	                .attr('height', function(d) { return that.height - yScale(d.count); })
-	            
-	            that.svg.selectAll('rect')
-	                .style('fill', that.mainColor)
+	                .attr('height', function(d) { return height - yScale(d.count); });
 
-	            that.svg.selectAll('rect')
-	                .data(data)
-	                .transition()
-	                .duration(400)
-	                .attr('x', function(d) { return xScale(d.name); })                
-	                .attr('width', xScale.bandwidth())                
-	                .attr('y', function(d) { 
-	                    return yScale(d.count); })
-	                .attr('height', function(d){
-	                    return that.height - yScale(d.count);
-	                })
-	            
-	            that.svg.selectAll('rect')
-	                .data(data)
-	                .exit()
-	                .remove();
-
-	            var lables = that.svg.selectAll('text')
+	            var lables = svg.selectAll('text')
 	                .data(data)
 	                .enter()
 	                .append('text')
 	                .text(function (d) { return d.name })
 	                .attr('transform', function(d) { 
-	                    return 'translate(' 
-	                        + (xScale(d.name) + xScale.bandwidth() / 2) 
-	                        + ',' 
-	                        + (that.height - 5) 
-	                        + ')'; 
+	                    return 'translate(' + (xScale(d.name) + 10) + ',' + (height - 5) + ')'; 
 	                })
 	                .attr('class', 'bar-label')
-
-	            that.svg.selectAll('text')
-	                .data(data)
-	                .text(function (d) { return d.name })
-
-	            that.svg.selectAll('text')
-	                .data(data)
-	                .transition()
-	                .duration(400)
-	                .attr('transform', function(d) { 
-	                    return 'translate(' 
-	                        + (xScale(d.name) + xScale.bandwidth() / 2) 
-	                        + ',' 
-	                        + (that.height - 5) 
-	                        + ')'; 
-	                })
-	 
-	            that.svg.selectAll('text')
-	                .data(data)
-	                .exit()
-	                .remove();
 
 	            return this;
 	        },
